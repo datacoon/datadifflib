@@ -10,10 +10,10 @@ import bson
 import json
 import csv
 import xxhash
-import jsondiff
+#import jsondiff
 
 
-def json_delta(key, left, right, outfile, difftype='patch'):
+def json_delta(key, left, right, outfile, difftype='full'):
     """Generates delta file against 2 jsonl (json lines) files with 'key' as unique key of each record"""
     complexkey = False
     if key.find('.') > -1:
@@ -77,8 +77,9 @@ def json_delta(key, left, right, outfile, difftype='patch'):
     for key in report['c']:
         kv = key
         if difftype == 'patch':
-            patch = jsondiff.diff(rdiffed[key], ldiffed[key], syntax='explicit', dump=True)
-            o = {'mode' : 'c', 'uniqkey' : kv, 'patch': patch}
+#            patch = jsondiff.diff(rdiffed[key], ldiffed[key], syntax='explicit', dump=True)
+#            o = {'mode' : 'c', 'uniqkey' : kv, 'patch': patch}
+            Exception('not supported yet')
         else:
             o = {'mode' : 'c', 'uniqkey' : kv, 'obj': ldiffed[key]}
         output['records'].append(o)
@@ -89,9 +90,18 @@ def json_delta(key, left, right, outfile, difftype='patch'):
 
 
 def apply_json_delta(left, patch, outfile):
-    patchdata = json.load(open(patch, 'r', encoding='utf8'))
+    """Apply patch to JSON lines file"""
+    if isinstance(left, io.IOBase):
+        leftf = left
+    else:
+        leftf = open(left, 'r', encoding='utf8')
+
+    if isinstance(patch, io.IOBase):
+        deltaf = patch
+    else:
+        deltaf = open(patch, 'r', encoding='utf8')
+    patchdata = json.load(deltaf)
     patched = {'a': {}, 'c' : {}, 'd': {}}
-    leftf = open(left, 'r', encoding='utf8')
     for r in patchdata['records']:
         if 'patch' in r.keys():
             o = r['patch']
@@ -109,6 +119,115 @@ def apply_json_delta(left, patch, outfile):
             outfile.write(json.dumps(o) + '\n')
     for o in patched['a'].values():
         outfile.write(json.dumps(o) + '\n')
+
+
+
+def bson_delta(key, left, right, outfile, difftype='full'):
+    """Generates delta file against 2 BSON files with 'key' as unique key of each record"""
+    complexkey = False
+    if key.find('.') > -1:
+        parts = key.split('.')
+        complexkey = True
+
+    if isinstance(left, io.IOBase):
+        leftf = left
+    else:
+        leftf = open(left, 'rb', encoding='utf8')
+
+    if isinstance(right, io.IOBase):
+        rightf = right
+    else:
+        rightf = open(right, 'rb', encoding='utf8')
+
+    lefti = bson_index(key, leftf)
+    righti = bson_index(key, rightf)
+    report = compare_index(lefti, righti)
+    n = 0
+    n2 = 0
+    leftf.seek(0)
+    rightf.seek(0)
+    ldiffed = {}
+    rdiffed = {}
+    output = {'uniqkey' : key, 'records' : []}
+    for l in rightf:
+        r = json.loads(l)
+        if not complexkey:
+            kv = r[key]
+        else:
+            v = r
+            for p in parts:
+                v = v[p]
+            kv = v
+        if kv in report['a']:
+            o = {'mode' : 'a', 'uniqkey' : kv, 'obj': r}
+            output['records'].append(o)
+            n += 1
+        elif kv in report['c']:
+            ldiffed[kv] = r
+#            o = {'mode' : 'c', 'uniqkey' : key, 'obj': r}
+#            outfile.write(json.dumps(o)+'\n')
+            n2 += 1
+    n = 0
+    for l in leftf:
+        r = json.loads(l)
+        if not complexkey:
+            kv = r[key]
+        else:
+            v = r
+            for p in parts:
+                v = v[p]
+            kv = v
+        if kv in report['d']:
+            n += 1
+            o = {'mode' : 'd', 'uniqkey' : kv, 'obj': r}
+            output['records'].append(o)
+        elif kv in report['c']:
+            rdiffed[kv] = r
+    for key in report['c']:
+        kv = key
+        if difftype == 'patch':
+#            patch = jsondiff.diff(rdiffed[key], ldiffed[key], syntax='explicit', dump=True)
+#            o = {'mode' : 'c', 'uniqkey' : kv, 'patch': patch}
+            pass
+        else:
+            o = {'mode' : 'c', 'uniqkey' : kv, 'obj': ldiffed[key]}
+        output['records'].append(o)
+        pass
+    outfile.write(bson.BSON.encode(output))
+    return outfile
+
+
+
+def apply_bson_delta(left, patch, outfile):
+    """Apply patch to bson file and output results file"""
+    if isinstance(left, io.IOBase):
+        leftf = left
+    else:
+        leftf = open(left, 'rb')
+
+    if isinstance(patch, io.IOBase):
+        deltaf = patch
+    else:
+        deltaf = open(patch, 'rb')
+
+    patchdata = bson.decode(patch.read())
+    patched = {'a': {}, 'c' : {}, 'd': {}}
+    for r in patchdata['records']:
+        if 'patch' in r.keys():
+            o = r['patch']
+        else:
+            o = r['obj']
+        patched[r['mode']][r['uniqkey']] = o
+    for o in bson.decode_file_iter(leftf):
+        if o[patchdata['uniqkey']] in patched['d']:
+            continue
+        elif o[patchdata['uniqkey']] in patched['c']:
+            o = patched['c'][o[patchdata['uniqkey']]]
+            outfile.write(bson.BSON.encode(o))
+        else:
+            outfile.write(bson.BSON.encode(o))
+    for o in patched['a'].values():
+        outfile.write(bson.BSON.encode(o))
 
 
 if __name__ == "__main__":

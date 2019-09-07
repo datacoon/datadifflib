@@ -13,7 +13,7 @@ import jsondiff
 import click
 
 from datadiff.diff import bsondiff, jsondiff, csvdiff
-from datadiff.delta import apply_json_diff, json_delta
+from datadiff.delta import apply_json_delta, json_delta, bson_delta, apply_bson_delta
 
 @click.group()
 def cli1():
@@ -55,7 +55,7 @@ def cli2():
 @click.argument('output')
 def delta(key, left, right, output):
     ext = left.rsplit('.', 1)[-1]
-    if ext == 'json':
+    if ext in ['json', 'jsonl']:
         deltafile = output
         outfile = open(deltafile, 'w', encoding='utf8')
         json_delta(key, left, right, outfile, difftype='full')
@@ -70,8 +70,10 @@ def cli3():
 @click.argument('delta')
 @click.argument('output')
 def patch(dataset, delta, output):
-    outfile = open(output, 'w', encoding='utf8')
-    apply_json_delta(dataset, delta, outfile)
+    ext = dataset.rsplit('.', 1)[-1]
+    if ext in ['json', 'jsonl']:
+        outfile = open(output, 'w', encoding='utf8')
+        apply_json_delta(dataset, delta, outfile)
 
 
 cli = click.CommandCollection(sources=[cli1, cli2, cli3])

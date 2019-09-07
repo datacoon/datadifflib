@@ -42,7 +42,7 @@ Limitations
 * Only JSON files supported to generate and apply delta files
 * Limited support for very huge files 100GB+, max tested files are 5GB
 * Files readed twice to generated delta. First time it generates index and second time it extracts added, deleted and changed records
-
+* The library and tool doesn't ever know anything about applicability of patch and so on. You have to manage yourself version control of datasets
 
 
 
@@ -63,15 +63,15 @@ Examples
 
 Compare two versions of same dataset with unique key defined in 'regnum' field in each dataset
 
-    python datadiffcli.py compare regnum reestrgp_2018.json reestrgp_2019.json  
-    
+    python datadiffcli.py compare regnum reestrgp_2018.json reestrgp_2019.json
+
 Generates delta file after comparsion of two versions of same dataset with unique key defined in 'regnum' field
-                                                                                          
-    python datadiffcli.py delta regnum reestrgp_2018.json reestrgp_2019.json reestrgp_delta.json 
+
+    python datadiffcli.py delta regnum reestrgp_2018.json reestrgp_2019.json reestrgp_delta.json
 
 Apply delta file against original dataset and produce updated dataset
 
-    python datadiffcli.py patch reestrgp_2018.json reestrgp_delta.json reestrgp_proc.json 
+    python datadiffcli.py patch reestrgp_2018.json reestrgp_delta.json reestrgp_proc.json
 
 
 How to use library
@@ -85,7 +85,7 @@ Generates report on changes between 'reestrgp_2018.json' and 'reestrgp_2019.json
     >>> report = jsondiff(key, left, right)
 
 
-Generates delta file between two versions of dataset	
+Generates delta file between two versions of dataset
     >>> from datadiff.delta import json_delta
     >>> left = 'reestrgp_2018.json'
     >>> right = 'reestrgp_2019.json'
@@ -93,11 +93,20 @@ Generates delta file between two versions of dataset
     >>> json_delta(key, left, right, outfile, difftype='full')
 
 
-Apply patch to first version of dataset	
+Apply patch to first version of dataset
     >>> from datadiff.delta import apply_json_delta
     >>> dataset = 'reestrgp_2018.json'
     >>> delta = 'reestrgp_delta.json'
     >>> outfile = 'reestrgp_proc.json'
     >>> apply_json_delta(key, dataset, delta, outfile)
 
-                                                                                                                         
+
+Patch file format
+==================
+Patch file is quite simple it's serialized json structure.
+Each record in 'records' field has fields:
+- mode    - 'a' for add, 'c' for change and 'd' for delete
+- uniqkey - unique key of selected record
+- obj     - original object value from original or compared dataset file
+
+Unique copied outside 'obj' since in future obj could be replaced by patch to selected record, not record itself
