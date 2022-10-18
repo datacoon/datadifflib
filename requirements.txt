@@ -1,3 +1,4 @@
 bson
 xxhash
 click
+jsondiff
