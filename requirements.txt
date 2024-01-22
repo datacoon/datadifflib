@@ -1,4 +1,4 @@
-bson
+pymongo
 xxhash
 click
 jsondiff
